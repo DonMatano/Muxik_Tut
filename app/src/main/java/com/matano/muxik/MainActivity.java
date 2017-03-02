@@ -1,11 +1,16 @@
 package com.matano.muxik;
 
 import android.Manifest;
+import android.content.ComponentName;
 import android.content.ContentResolver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.os.IBinder;
 import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -13,6 +18,8 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.view.Menu;
 import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.view.View;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,6 +32,9 @@ public class MainActivity extends AppCompatActivity
     RecyclerView.LayoutManager recycleViewLayoutManager;
     SongAdapter recyclerSongAdapter;
     private final String TAG = MainActivity.class.getSimpleName();
+    private MusicService musicService;
+    private Intent playIntent;
+    private boolean musicBound = false;
 
 
     @Override
@@ -52,6 +62,48 @@ public class MainActivity extends AppCompatActivity
         recyclerSongAdapter = new SongAdapter(this, songArrayList);
         songRecyclerView.setAdapter(recyclerSongAdapter);
     }
+
+    @Override
+    protected void onStart()
+    {
+        super.onStart();
+        if (playIntent == null)
+        {
+            playIntent = new Intent(this, MusicService.class);
+            bindService(playIntent, musicConnection, Context.BIND_AUTO_CREATE);
+            startService(playIntent);
+        }
+    }
+
+    @Override
+    protected void onDestroy()
+    {
+        stopService(playIntent);
+        musicService = null;
+        super.onDestroy();
+    }
+
+    //Connect to the service
+    private ServiceConnection musicConnection = new ServiceConnection()
+    {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service)
+        {
+            MusicService.MusicBinder musicBinder = (MusicService.MusicBinder) service;
+            //get Service
+            musicService = musicBinder.getService();
+
+            //pass List
+            musicService.setSongArrayList(songArrayList);
+            musicBound = true;
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name)
+        {
+            musicBound = false;
+        }
+    };
 
     public void getSongList()
     {
@@ -96,6 +148,26 @@ public class MainActivity extends AppCompatActivity
         return true;
     }
 
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item)
+    {
+        //menu item selected
+
+        switch (item.getItemId())
+        {
+            case R.id.action_shuffle:
+                //shuffle
+                break;
+
+            case R.id.action_end:
+                stopService(playIntent);
+                musicService = null;
+                System.exit(0);
+                break;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
     public void askPermission()
     {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
@@ -118,5 +190,11 @@ public class MainActivity extends AppCompatActivity
                 return;
             }
         }
+    }
+
+    public void songPicked(View view)
+    {
+        musicService.setSongPosn(Integer.parseInt(view.getTag().toString()));
+        musicService.playSong();
     }
 }
